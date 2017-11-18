@@ -1,6 +1,23 @@
 # Use 'pip freeze --local --requirement requirements.txt' to preserve the comments and order!
 
+# The pygit2 version must match that of your installed libgit2!
+# These were installed by 'pip install pip install "pygit2>=0.25.0,<0.26"'
+cffi==1.9.1
+pycparser==2.18
+pygit2==0.25.1
+six==1.11.0
+
 # These were installed by 'pip install "django>=1.11,<1.12"'
 Django==1.11.7
 pytz==2017.3
 
+# These were installed by 'pip install "graphene>=2.0,<2.1" "graphene-django>=2.0,<2.1"'
+graphene==2.0.1
+graphene-django==2.0.0
+graphql-core==2.0
+graphql-relay==0.4.5
+iso8601==0.1.12
+promise==2.1
+Rx==1.6.0
+singledispatch==3.4.0.3
+typing==3.6.2

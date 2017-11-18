@@ -2,9 +2,9 @@
 # that makes no sense when we're excluding the database: 'git checkout <branch>'
 # can replace one but not the other.
 db.sqlite3
-login/migrations/
+kroftig/migrations/
 
 project/__pycache__/
-login/__pycache__/
+kroftig/__pycache__/
 
 README.html
