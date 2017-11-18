@@ -38,12 +38,28 @@ def get_current_branch(repo):
     return branch
 
 
+def get_repo(repo_id):
+    path = os.getcwd() # -FIX-
+    repo = git.Repository(path)
+    return repo
+
+
 class LogCommit(ObjectType):
     class Meta:
         interfaces = (Node, )
 
     oid = graphene.String()
     message = graphene.String()
+
+    @classmethod
+    def get_node(cls, info, id):
+        repo = get_repo('-FIX-')
+        if not repo:
+            return None
+        commit = repo.get(id)
+        if not commit:
+            return None
+        return LogCommit(id=id, oid=id, message=commit.message)
 
 
 class LogCommitConnection(relay.Connection):
@@ -76,9 +92,11 @@ class Repo(ObjectType):
 
     def resolve_query_repo(_, info):
         """Resolver for Query field 'repo'."""
-        path = os.getcwd() # -FIX-
-        repo = git.Repository(path)
-        return repo
+        return get_repo('-FIX-')
+
+    @classmethod
+    def get_node(cls, info, id):
+        return Repo() # -FIX-
 
 
 class Query(object):
