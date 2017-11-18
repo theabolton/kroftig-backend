@@ -1,0 +1,6 @@
+# Use 'pip freeze --local --requirement requirements.txt' to preserve the comments and order!
+
+# These were installed by 'pip install "django>=1.11,<1.12"'
+Django==1.11.7
+pytz==2017.3
+
