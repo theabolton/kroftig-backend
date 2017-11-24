@@ -7,4 +7,9 @@ kroftig/migrations/
 project/__pycache__/
 kroftig/__pycache__/
 
+.mypy_cache/
+.pylintrc
+
 README.html
+kroftig/fixtures/local_example_data.json
+requirements-extra.html
