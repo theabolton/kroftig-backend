@@ -47,6 +47,50 @@ def humantime(time: int) -> str:
     return humanize.naturaltime(datetime.datetime.fromtimestamp(time))
 
 
+class Branch(ObjectType):
+    class Meta:
+        interfaces = (Node, )
+
+    name = graphene.String()
+    message = graphene.String()
+    rev = graphene.String()
+    ctime = graphene.String()
+
+    @classmethod
+    def get_node(cls, info, id):
+        """Node IDs for Branchs are of the form (before base64 encoding):
+        'Branch:<repo_name>^<commit-sha-in-hex>'.
+        """
+        (repo_name, branch_name) = id.split('^')
+        repo = get_repo_from_name(repo_name)
+        if not repo:
+            return None
+        git_repo = repo.git_repo
+        if branch_name not in git_repo.branches.local:
+            return None
+        commit = git_repo.revparse_single(branch_name)
+        if not commit:
+            return None
+        return Branch(id=id, name=branch_name, message=commit.message, rev=commit.hex,
+                      ctime=humantime(commit.committer.time))
+
+
+class BranchConnection(relay.Connection):
+    class Meta:
+        node = Branch
+
+    def resolve_repo_branches(repo: RepoModel, info, **args):
+        """Resolver for Repo field 'branches'."""
+        git_repo = repo.git_repo
+        branches = []
+        for branch_name in git_repo.branches.local:
+            commit = repo.git_repo.revparse_single(branch_name)
+            branches.append(Branch(id=str(repo.name) + '^' + branch_name, name=branch_name,
+                                   message=commit.message, rev=commit.hex,
+                                   ctime=humantime(commit.committer.time)))
+        return branches
+
+
 class LogCommit(ObjectType):
     class Meta:
         interfaces = (Node, )
@@ -119,6 +163,11 @@ class Repo(DjangoObjectType):
         interfaces = (Node, )
 
     current_branch = graphene.String()
+    branches = relay.ConnectionField(
+        BranchConnection,
+        resolver=BranchConnection.resolve_repo_branches,
+        #**BranchConnection.get_repo_commits_input_fields()
+    )
     commits = relay.ConnectionField(
         LogCommitConnection,
         resolver=LogCommitConnection.resolve_repo_commits,

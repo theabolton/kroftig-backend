@@ -206,6 +206,49 @@ class RelayNodeTests(TestCase):
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
+    def test_node_for_branch(self):
+        set_up_test_data(self.tempdir)
+        query = '''
+          query TestNodeForBranch {
+            repo(name: "test_repo") {
+              branches(first: 1) {
+                edges {
+                  node {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+        '''
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        branch = result.data['repo']['branches']['edges'][0]['node']
+        branch_gid = branch['id']
+        branch_name = branch['name']
+        query = '''
+          query {
+            node(id: "%s") {
+              id
+              ...on Branch {
+                name
+              }
+            }
+          }
+        ''' % branch_gid
+        expected = {
+          'node': {
+            'id': branch_gid,
+            'name': branch_name,
+          }
+        }
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query)
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+
 
 # ========== Repo tests ==========
 
@@ -278,6 +321,32 @@ class RepoTests(TestCase):
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+
+    def test_repo_branches(self):
+        """Repo 'branches' field."""
+        set_up_test_data(self.tempdir)
+        query = '''
+          query RepoBranchesQuery {
+            repo(name: "test_repo") {
+              branches {
+                edges {
+                  node {
+                    name
+                    message
+                    rev
+                    ctime
+                  }
+                }
+              }
+            }
+          }
+        '''
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        self.assertTrue('master' in map(lambda node: node['node']['name'],
+                                        result.data['repo']['branches']['edges']),
+                        msg=repr(result.data))
 
     def test_repo_commits(self):
         """Repo 'commits' field."""
