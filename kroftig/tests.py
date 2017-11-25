@@ -84,6 +84,11 @@ def set_up_test_data(tempdir):
     RepoModel.objects.create(name='test_repo', path=path, description="Test Repo")
 
 
+class TestContext(object):
+    """An empty class for use as schema execution context."""
+    pass
+
+
 # ========== GraphQL schema general tests ==========
 
 class RootTests(SimpleTestCase):
@@ -139,7 +144,7 @@ class RelayNodeTests(TestCase):
           }
         '''
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         repo_gid = result.data['repo']['id']
         query = '''
@@ -175,7 +180,7 @@ class RelayNodeTests(TestCase):
           }
         '''
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         commit = result.data['repo']['commits']['edges'][0]['node']
         commit_gid = commit['id']
@@ -250,7 +255,7 @@ class RepoTests(TestCase):
           }
         }
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
@@ -270,7 +275,7 @@ class RepoTests(TestCase):
           }
         }
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
@@ -291,7 +296,7 @@ class RepoTests(TestCase):
           }
         '''
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertGreaterEqual(len(result.data['repo']['commits']['edges']), 4,
                                 msg=repr(result.data)) # should have at least 4 commits
@@ -299,7 +304,7 @@ class RepoTests(TestCase):
     def test_repo_commits_pagination(self):
         """Make sure that pagination works on LogCommitConnection."""
         set_up_test_data(self.tempdir)
-        # retrieve the first two commits, plus a cursor for the next page
+        # retrieve the first three commits, plus a cursor for the next page
         query = '''
           query RepoCommitsPaginationTest {
             repo(name: "test_repo") {
@@ -317,7 +322,7 @@ class RepoTests(TestCase):
           }
         '''
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         # save commit oids, and remove their nodes from edges
         oids = [oid for oid in map(lambda m: m['node']['oid'],
@@ -365,6 +370,68 @@ class RepoTests(TestCase):
             }
         }
         schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+
+    def test_repo_commits_with_rev(self):
+        """Test the LogCommitConnection 'rev' field."""
+        set_up_test_data(self.tempdir)
+        # retrieve the first three commits
+        query = '''
+          query RepoCommitsWithRefTest {
+            repo(name: "test_repo") {
+              commits(first: 3) {
+                edges {
+                  node {
+                    oid
+                  }
+                }
+              }
+            }
+          }
+        '''
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        # save commit oids, and remove their nodes from edges
+        oids = [oid for oid in map(lambda m: m['node']['oid'],
+                                   result.data['repo']['commits']['edges'])]
+        del result.data['repo']['commits']['edges'][:]
+        expected = {
+            'repo': {
+                'commits': {
+                    'edges': [
+                        # deleted
+                    ],
+                }
+            }
+        }
+        self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+        # ask for commits from HEAD^, which should start at the second result from above
+        query = '''
+          query RepoCommitsWithRefTest2 {
+            repo(name: "test_repo") {
+              commits(rev: "HEAD^", first: 1) {
+                edges {
+                  node {
+                    oid
+                  }
+                }
+              }
+            }
+          }
+        '''
+        expected = {
+            'repo': {
+                'commits': {
+                    'edges': [
+                        { 'node': { 'oid': oids[1] } },
+                    ],
+                }
+            }
+        }
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))

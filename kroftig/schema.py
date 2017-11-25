@@ -78,9 +78,31 @@ class LogCommitConnection(relay.Connection):
     class Meta:
         node = LogCommit
 
+    rev = graphene.String()
+
+    def resolve_rev(connection: 'LogCommitConnection', info, **args):
+        if info.context.kroftig:
+            return info.context.kroftig.get('rev', None)
+        return None
+
+    @staticmethod
+    def get_repo_commits_input_fields():
+        """Input fields for Repo field 'commits'."""
+        return {
+            'rev': graphene.Argument(graphene.String),
+        }
+
     def resolve_repo_commits(repo: RepoModel, info, **args):
+        """Resolver for Repo field 'commits'."""
         git_repo = repo.git_repo
-        last = git_repo[git_repo.head.target]
+        rev = args.get('rev', None)
+        if not rev:
+            last = git_repo[git_repo.head.target]
+        else:
+            last = git_repo.revparse_single(rev)
+            if not last:
+                return None
+            info.context.kroftig['rev'] = rev
         commits = []
         for commit in git_repo.walk(last.id, git.GIT_SORT_TOPOLOGICAL):
             obj = LogCommit(id=str(repo.name) + '^' + commit.hex, oid=commit.hex,
@@ -100,7 +122,7 @@ class Repo(DjangoObjectType):
     commits = relay.ConnectionField(
         LogCommitConnection,
         resolver=LogCommitConnection.resolve_repo_commits,
-        #**LogCommitConnection.get_repo_commits_input_fields()
+        **LogCommitConnection.get_repo_commits_input_fields()
     )
 
     def resolve_current_branch(repo: RepoModel, info):
@@ -118,7 +140,9 @@ class Repo(DjangoObjectType):
     def resolve_query_repo(_, info, **args):
         """Resolver for Query field 'repo'."""
         name = args.get('name')
-        return get_repo_from_name(name)
+        repo = get_repo_from_name(name)
+        info.context.kroftig = { 'repo': repo }
+        return repo
 
 
 class Query(object):
@@ -131,4 +155,4 @@ class Query(object):
     repos = graphene.List(Repo)
 
     def resolve_repos(_, info):
-        return RepoModel.objects.all()
+        return RepoModel.objects.all().order_by('name')
