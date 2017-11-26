@@ -249,6 +249,49 @@ class RelayNodeTests(TestCase):
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
+    def test_node_for_tree_entry(self):
+        set_up_test_data(self.tempdir)
+        query = '''
+          query TestNodeForTreeEntry {
+            repo(name: "test_repo") {
+              tree(rev: "master" first: 1) {
+                edges {
+                  node {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+          }
+        '''
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        entry = result.data['repo']['tree']['edges'][0]['node']
+        entry_gid = entry['id']
+        entry_name = entry['name']
+        query = '''
+          query {
+            node(id: "%s") {
+              id
+              ...on TreeEntry {
+                name
+              }
+            }
+          }
+        ''' % entry_gid
+        expected = {
+          'node': {
+            'id': entry_gid,
+            'name': entry_name,
+          }
+        }
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query)
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+
 
 # ========== Repo tests ==========
 
@@ -504,3 +547,28 @@ class RepoTests(TestCase):
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+
+    def test_repo_tree(self):
+        """Test Repo 'tree' field."""
+        set_up_test_data(self.tempdir)
+        query = '''
+          query RepoTreeTest {
+            repo(name: "test_repo") {
+              tree(rev: "master", first: 100) {
+                edges {
+                  node {
+                    name
+                  }
+                }
+              }
+            }
+          }
+        '''
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        files = list(map(lambda node: node['node']['name'], result.data['repo']['tree']['edges']))
+        files.sort()
+        expected = ['.gitignore', 'LICENSE', 'README.rst', 'kroftig', 'manage.py', 'project',
+                    'requirements.txt']
+        self.assertEqual(files, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))

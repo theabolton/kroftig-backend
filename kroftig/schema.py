@@ -157,6 +157,71 @@ class LogCommitConnection(relay.Connection):
         return commits
 
 
+class TreeEntry(ObjectType):
+    class Meta:
+        interfaces = (Node, )
+
+    oid = graphene.String()
+    name = graphene.String()
+    filemode = graphene.Int()
+    type_ = graphene.String(name='type')
+
+    @classmethod
+    def get_node(cls, info, id):
+        """Sigh. PyGit2 doesn't include git_tree_lookup(), so until I can put together a PR for it,
+        just include the tree id in the encoded Node ID, like this (before base64 encoding):
+        'TreeEntry:<repo_name>^<tree-sha-in-hex>^<entry-sha-in-hex>'.
+        """
+        # https://libgit2.github.com/libgit2/#HEAD/group/tree/git_tree_lookup
+        (repo_name, tree_id, entry_id) = id.split('^')
+        repo = get_repo_from_name(repo_name)
+        if not repo:
+            return None
+        tree = repo.git_repo.get(tree_id)
+        if not tree:
+            return None
+        # And no get_tree_entry_byid() either? Fine, do it manually:
+        # https://libgit2.github.com/libgit2/#HEAD/group/tree/git_tree_entry_byid
+        entry = None
+        for e in tree:
+            if e.hex == entry_id:
+                entry = e
+                break
+        if not entry:
+            return None
+        return TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
+                         type_=entry.type)
+
+
+class Tree(relay.Connection):
+    class Meta:
+        node = TreeEntry
+
+    @staticmethod
+    def get_repo_tree_input_fields():
+        """Input fields for Repo field 'tree'."""
+        return {
+            'rev': graphene.Argument(graphene.String),
+        }
+
+    def resolve_repo_tree(repo: RepoModel, info, **args):
+        """Resolver for Repo field 'tree'."""
+        git_repo = repo.git_repo
+        rev = args.get('rev', None)
+        if not rev:
+            return None
+        commit = git_repo.revparse_single(rev)
+        if not commit:
+            return None
+        #info.context.kroftig['rev'] = rev
+        entries = []
+        for entry in commit.tree:
+            entries.append(TreeEntry(id=str(repo.name) + '^' + commit.tree.hex + '^' + entry.hex,
+                                     oid=entry.hex, name=entry.name, filemode=entry.filemode,
+                                     type_=entry.type))
+        return entries
+
+
 class Repo(DjangoObjectType):
     class Meta:
         model = RepoModel
@@ -172,6 +237,11 @@ class Repo(DjangoObjectType):
         LogCommitConnection,
         resolver=LogCommitConnection.resolve_repo_commits,
         **LogCommitConnection.get_repo_commits_input_fields()
+    )
+    tree = relay.ConnectionField(
+        Tree,
+        resolver=Tree.resolve_repo_tree,
+        **Tree.get_repo_tree_input_fields()
     )
 
     def resolve_current_branch(repo: RepoModel, info):
