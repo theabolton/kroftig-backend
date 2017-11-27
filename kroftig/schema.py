@@ -176,6 +176,14 @@ class TreeEntry(ObjectType):
     name = graphene.String()
     filemode = graphene.Int()
     type_ = graphene.String(name='type')
+    size = graphene.Int()
+
+    def resolve_size(entry: 'TreeEntry', info, **args):
+        git_repo = get_from_context_cache(info.context, 'git_repo')
+        obj = git_repo.get(entry.oid)
+        if obj.type == git.GIT_OBJ_BLOB:
+            return obj.size
+        return None
 
     @classmethod
     def get_node(cls, info, id):

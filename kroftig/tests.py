@@ -257,6 +257,7 @@ class RelayNodeTests(TestCase):
                   node {
                     id
                     name
+                    size
                   }
                 }
               }
@@ -269,12 +270,14 @@ class RelayNodeTests(TestCase):
         entry = result.data['repo']['tree']['edges'][0]['node']
         entry_gid = entry['id']
         entry_name = entry['name']
+        entry_size = entry['size']
         query = '''
           query {
             node(id: "%s") {
               id
               ...on TreeEntry {
                 name
+                size
               }
             }
           }
@@ -283,6 +286,7 @@ class RelayNodeTests(TestCase):
           'node': {
             'id': entry_gid,
             'name': entry_name,
+            'size': entry_size,
           }
         }
         result = schema.execute(query, context_value=TestContext())
@@ -478,7 +482,6 @@ class RepoTests(TestCase):
                 }
             }
         }
-        schema = graphene.Schema(query=Query)
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
@@ -540,7 +543,6 @@ class RepoTests(TestCase):
                 }
             }
         }
-        schema = graphene.Schema(query=Query)
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
@@ -555,6 +557,7 @@ class RepoTests(TestCase):
                 edges {
                   node {
                     name
+                    size
                   }
                 }
               }
@@ -566,6 +569,10 @@ class RepoTests(TestCase):
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         files = list(map(lambda node: node['node']['name'], result.data['repo']['tree']['edges']))
         files.sort()
+        # brittle, depends on the contents of the repo:
         expected = ['.gitignore', 'LICENSE', 'README.rst', 'kroftig', 'manage.py', 'project',
                     'requirements.txt']
         self.assertEqual(files, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+        size_present = any(map(lambda node: node['node']['size'] is not None,
+                               result.data['repo']['tree']['edges']))
+        self.assertTrue(size_present, 'none of the sizes in the query were non-null')
