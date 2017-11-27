@@ -201,7 +201,6 @@ class RelayNodeTests(TestCase):
             'message': commit_message,
           }
         }
-        schema = graphene.Schema(query=Query)
         result = schema.execute(query)
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
@@ -244,7 +243,6 @@ class RelayNodeTests(TestCase):
             'name': branch_name,
           }
         }
-        schema = graphene.Schema(query=Query)
         result = schema.execute(query)
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
@@ -287,8 +285,7 @@ class RelayNodeTests(TestCase):
             'name': entry_name,
           }
         }
-        schema = graphene.Schema(query=Query)
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 

@@ -47,6 +47,19 @@ def humantime(time: int) -> str:
     return humanize.naturaltime(datetime.datetime.fromtimestamp(time))
 
 
+def cache_in_context(context, key, value):
+    """Save a key-value pair in the context for use by child resolvers."""
+    if hasattr(context, 'kroftig'):
+        context.kroftig[key] = value
+    else:
+        context.kroftig = { key: value }
+
+
+def get_from_context_cache(context, key):
+    """Retrieve a cached item from the context. Raise KeyError if not present."""
+    return context.kroftig[key]
+
+
 class Branch(ObjectType):
     class Meta:
         interfaces = (Node, )
@@ -125,9 +138,7 @@ class LogCommitConnection(relay.Connection):
     rev = graphene.String()
 
     def resolve_rev(connection: 'LogCommitConnection', info, **args):
-        if info.context.kroftig:
-            return info.context.kroftig.get('rev', None)
-        return None
+        return get_from_context_cache(info.context, 'rev')
 
     @staticmethod
     def get_repo_commits_input_fields():
@@ -146,7 +157,7 @@ class LogCommitConnection(relay.Connection):
             last = git_repo.revparse_single(rev)
             if not last:
                 return None
-            info.context.kroftig['rev'] = rev
+            cache_in_context(info.context, 'rev', rev)
         commits = []
         for commit in git_repo.walk(last.id, git.GIT_SORT_TOPOLOGICAL):
             obj = LogCommit(id=str(repo.name) + '^' + commit.hex, oid=commit.hex,
@@ -177,7 +188,8 @@ class TreeEntry(ObjectType):
         repo = get_repo_from_name(repo_name)
         if not repo:
             return None
-        tree = repo.git_repo.get(tree_id)
+        git_repo = repo.git_repo
+        tree = git_repo.get(tree_id)
         if not tree:
             return None
         # And no get_tree_entry_byid() either? Fine, do it manually:
@@ -189,6 +201,8 @@ class TreeEntry(ObjectType):
                 break
         if not entry:
             return None
+        # stash repo for TreeEntry.resolve_size()
+        cache_in_context(info.context, 'git_repo', git_repo)
         return TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
                          type_=entry.type)
 
@@ -213,7 +227,8 @@ class Tree(relay.Connection):
         commit = git_repo.revparse_single(rev)
         if not commit:
             return None
-        #info.context.kroftig['rev'] = rev
+        # stash repo for TreeEntry.resolve_size()
+        cache_in_context(info.context, 'git_repo', git_repo)
         entries = []
         for entry in commit.tree:
             entries.append(TreeEntry(id=str(repo.name) + '^' + commit.tree.hex + '^' + entry.hex,
@@ -260,7 +275,7 @@ class Repo(DjangoObjectType):
         """Resolver for Query field 'repo'."""
         name = args.get('name')
         repo = get_repo_from_name(name)
-        info.context.kroftig = { 'repo': repo }
+        cache_in_context(info.context, 'repo', repo)
         return repo
 
 
