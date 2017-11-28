@@ -157,7 +157,8 @@ class LogCommitConnection(relay.Connection):
             last = git_repo.revparse_single(rev)
             if not last:
                 return None
-            cache_in_context(info.context, 'rev', rev)
+        # stash rev for resolve_rev()
+        cache_in_context(info.context, 'rev', rev)
         commits = []
         for commit in git_repo.walk(last.id, git.GIT_SORT_TOPOLOGICAL):
             obj = LogCommit(id=str(repo.name) + '^' + commit.hex, oid=commit.hex,
@@ -179,8 +180,8 @@ class TreeEntry(ObjectType):
     size = graphene.Int()
 
     def resolve_size(entry: 'TreeEntry', info, **args):
-        git_repo = get_from_context_cache(info.context, 'git_repo')
-        obj = git_repo.get(entry.oid)
+        repo = get_from_context_cache(info.context, 'repo')
+        obj = repo.git_repo.get(entry.oid)
         if obj.type == git.GIT_OBJ_BLOB:
             return obj.size
         return None
@@ -196,6 +197,7 @@ class TreeEntry(ObjectType):
         repo = get_repo_from_name(repo_name)
         if not repo:
             return None
+        cache_in_context(info.context, 'repo', repo)
         git_repo = repo.git_repo
         tree = git_repo.get(tree_id)
         if not tree:
@@ -209,8 +211,6 @@ class TreeEntry(ObjectType):
                 break
         if not entry:
             return None
-        # stash repo for TreeEntry.resolve_size()
-        cache_in_context(info.context, 'git_repo', git_repo)
         return TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
                          type_=entry.type)
 
@@ -218,6 +218,22 @@ class TreeEntry(ObjectType):
 class Tree(relay.Connection):
     class Meta:
         node = TreeEntry
+
+    @staticmethod
+    def build_instance(repo_name, commit):
+        entries = []
+        for entry in commit.tree:
+            entries.append(TreeEntry(id=repo_name + '^' + commit.tree.hex + '^' + entry.hex,
+                                     oid=entry.hex, name=entry.name, filemode=entry.filemode,
+                                     type_=entry.type))
+        return entries
+
+    def resolve_full_commit_tree(commit: 'FullCommit', info, **args):
+        """Resolver for FullCommit field 'tree'."""
+        repo = get_from_context_cache(info.context, 'repo')
+        git_repo = repo.git_repo
+        commit = git_repo.get(commit.oid)
+        return Tree.build_instance(repo.name, commit)
 
     @staticmethod
     def get_repo_tree_input_fields():
@@ -229,20 +245,73 @@ class Tree(relay.Connection):
     def resolve_repo_tree(repo: RepoModel, info, **args):
         """Resolver for Repo field 'tree'."""
         git_repo = repo.git_repo
+        rev = args.get('rev')
+        try:
+            commit = git_repo.revparse_single(rev)
+        except KeyError:
+            raise Exception("revision '{}' not found".format(rev))
+        return Tree.build_instance(repo.name, commit)
+
+
+class FullCommit(ObjectType):
+    class Meta:
+        interfaces = (Node, )
+
+    oid = graphene.String()
+    message = graphene.String()
+    author = graphene.String()
+    author_time = graphene.String()
+    author_email = graphene.String()
+    committer = graphene.String()
+    committer_time = graphene.String()
+    committer_email = graphene.String()
+    # The front end will often want full commit info along with the top level tree of the commit, so
+    # make a Tree instance available. On the other hand, parent commits won't be fetched for the
+    # same view, so just return their IDs.
+    parent_ids = graphene.List(graphene.String)
+    tree = relay.ConnectionField(Tree, resolver=Tree.resolve_full_commit_tree,
+                                 description="Relatively expensive, only fetch if needed")
+
+    @staticmethod
+    def build_instance(id, commit):
+        if not commit:
+            return None
+        return FullCommit(id=id, oid=commit.hex, message=commit.message,
+                          author=commit.author.name, author_time=humantime(commit.author.time),
+                          author_email=commit.author.email,
+                          committer=commit.committer.name,
+                          committer_time=humantime(commit.committer.time),
+                          committer_email=commit.committer.email,
+                          parent_ids=commit.parent_ids)
+
+    @classmethod
+    def get_node(cls, info, id):
+        """Node IDs for FullCommits are of the form (before base64 encoding):
+        'FullCommit:<repo_name>^<commit-sha-in-hex>'.
+        """
+        (repo_name, commit_id) = id.split('^')
+        repo = get_repo_from_name(repo_name)
+        if not repo:
+            return None
+        cache_in_context(info.context, 'repo', repo)
+        git_repo = repo.git_repo
+        return cls.build_instance(id, git_repo.get(commit_id))
+
+    @staticmethod
+    def get_repo_commit_input_fields():
+        """Input fields for Repo field 'commit'."""
+        return {
+            'rev': graphene.Argument(graphene.String, required=True),
+        }
+
+    def resolve_repo_commit(repo: RepoModel, info, **args):
+        """Resolver for Repo field 'commit'."""
+        git_repo = repo.git_repo
         rev = args.get('rev', None)
         if not rev:
             return None
         commit = git_repo.revparse_single(rev)
-        if not commit:
-            return None
-        # stash repo for TreeEntry.resolve_size()
-        cache_in_context(info.context, 'git_repo', git_repo)
-        entries = []
-        for entry in commit.tree:
-            entries.append(TreeEntry(id=str(repo.name) + '^' + commit.tree.hex + '^' + entry.hex,
-                                     oid=entry.hex, name=entry.name, filemode=entry.filemode,
-                                     type_=entry.type))
-        return entries
+        return FullCommit.build_instance(repo.name + '^' + commit.hex, commit)
 
 
 class Repo(DjangoObjectType):
@@ -255,6 +324,11 @@ class Repo(DjangoObjectType):
         BranchConnection,
         resolver=BranchConnection.resolve_repo_branches,
         #**BranchConnection.get_repo_commits_input_fields()
+    )
+    commit = graphene.Field(
+        FullCommit,
+        resolver=FullCommit.resolve_repo_commit,
+        **FullCommit.get_repo_commit_input_fields()
     )
     commits = relay.ConnectionField(
         LogCommitConnection,
