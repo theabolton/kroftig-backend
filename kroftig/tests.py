@@ -163,10 +163,10 @@ class RelayNodeTests(TestCase):
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
-    def test_node_for_log_commit(self):
+    def test_node_for_commit(self):
         set_up_test_data(self.tempdir)
         query = '''
-          query TestNodeForLogCommit {
+          query TestNodeForCommit {
             repo(name: "test_repo") {
               commits(first: 1) {
                 edges {
@@ -186,10 +186,10 @@ class RelayNodeTests(TestCase):
         commit_gid = commit['id']
         commit_message = commit['message']
         query = '''
-          query {
+          query TestNodeForCommit2 {
             node(id: "%s") {
               id
-              ...on LogCommit {
+              ...on Commit {
                 message
               }
             }
@@ -201,7 +201,7 @@ class RelayNodeTests(TestCase):
             'message': commit_message,
           }
         }
-        result = schema.execute(query)
+        result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
@@ -576,3 +576,39 @@ class RepoTests(TestCase):
         size_present = any(map(lambda node: node['node']['size'] is not None,
                                result.data['repo']['tree']['edges']))
         self.assertTrue(size_present, 'none of the sizes in the query were non-null')
+
+    def test_repo_commit(self):
+        """Test Repo 'commit' field."""
+        set_up_test_data(self.tempdir)
+        query = '''
+          query RepoCommitTest {
+            repo(name: "test_repo") {
+              commit(rev: "HEAD") {
+                oid
+                message
+                author
+                authorTime
+                authorEmail
+                committer
+                committerTime
+                committerEmail
+                parentIds
+                tree {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
+              }
+            }
+          }
+        '''
+        schema = graphene.Schema(query=Query)
+        result = schema.execute(query, context_value=TestContext())
+        self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
+        commit = result.data['repo']['commit']
+        for key in commit.keys():
+            self.assertIsNotNone(commit[key], msg="Key '%s' should not be null" % key)
+        length = len(commit['tree']['edges'])
+        self.assertGreater(length, 1, msg=repr(result.data)) # should have more than 1 file

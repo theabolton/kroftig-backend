@@ -104,33 +104,6 @@ class BranchConnection(relay.Connection):
         return branches
 
 
-class LogCommit(ObjectType):
-    class Meta:
-        interfaces = (Node, )
-
-    oid = graphene.String()
-    message = graphene.String()
-    author = graphene.String()
-    committer = graphene.String()
-    atime = graphene.String()
-    #ctime = graphene.String()
-
-    @classmethod
-    def get_node(cls, info, id):
-        """Node IDs for LogCommits are of the form (before base64 encoding):
-        'LogCommit:<repo_name>^<commit-sha-in-hex>'.
-        """
-        (repo_name, commit_id) = id.split('^')
-        repo = get_repo_from_name(repo_name)
-        if not repo:
-            return None
-        commit = repo.git_repo.get(commit_id)
-        if not commit:
-            return None
-        return LogCommit(id=id, oid=commit_id, message=commit.message, author=commit.author.name,
-                         committer=commit.committer.name, atime=humantime(commit.commit_time))
-
-
 class TreeEntry(ObjectType):
     class Meta:
         interfaces = (Node, )
@@ -190,8 +163,8 @@ class Tree(relay.Connection):
                                      type_=entry.type))
         return entries
 
-    def resolve_full_commit_tree(commit: 'FullCommit', info, **args):
-        """Resolver for FullCommit field 'tree'."""
+    def resolve_full_commit_tree(commit: 'Commit', info, **args):
+        """Resolver for Commit field 'tree'."""
         repo = get_from_context_cache(info.context, 'repo')
         git_repo = repo.git_repo
         commit = git_repo.get(commit.oid)
@@ -215,7 +188,7 @@ class Tree(relay.Connection):
         return Tree.build_instance(repo.name, commit)
 
 
-class FullCommit(ObjectType):
+class Commit(ObjectType):
     class Meta:
         interfaces = (Node, )
 
@@ -238,18 +211,18 @@ class FullCommit(ObjectType):
     def build_instance(id, commit):
         if not commit:
             return None
-        return FullCommit(id=id, oid=commit.hex, message=commit.message,
-                          author=commit.author.name, author_time=humantime(commit.author.time),
-                          author_email=commit.author.email,
-                          committer=commit.committer.name,
-                          committer_time=humantime(commit.committer.time),
-                          committer_email=commit.committer.email,
-                          parent_ids=commit.parent_ids)
+        return Commit(id=id, oid=commit.hex, message=commit.message,
+                      author=commit.author.name, author_time=humantime(commit.author.time),
+                      author_email=commit.author.email,
+                      committer=commit.committer.name,
+                      committer_time=humantime(commit.committer.time),
+                      committer_email=commit.committer.email,
+                      parent_ids=commit.parent_ids)
 
     @classmethod
     def get_node(cls, info, id):
-        """Node IDs for FullCommits are of the form (before base64 encoding):
-        'FullCommit:<repo_name>^<commit-sha-in-hex>'.
+        """Node IDs for Commits are of the form (before base64 encoding):
+        'Commit:<repo_name>^<commit-sha-in-hex>'.
         """
         (repo_name, commit_id) = id.split('^')
         repo = get_repo_from_name(repo_name)
@@ -273,12 +246,12 @@ class FullCommit(ObjectType):
         if not rev:
             return None
         commit = git_repo.revparse_single(rev)
-        return FullCommit.build_instance(repo.name + '^' + commit.hex, commit)
+        return Commit.build_instance(repo.name + '^' + commit.hex, commit)
 
 
 class LogCommitConnection(relay.Connection):
     class Meta:
-        node = LogCommit
+        node = Commit
 
     rev = graphene.String()
 
@@ -306,11 +279,7 @@ class LogCommitConnection(relay.Connection):
         cache_in_context(info.context, 'rev', rev)
         commits = []
         for commit in git_repo.walk(last.id, git.GIT_SORT_TOPOLOGICAL):
-            obj = LogCommit(id=str(repo.name) + '^' + commit.hex, oid=commit.hex,
-                            message=commit.message,
-                            author=commit.author.name, committer=commit.committer.name,
-                            atime=humantime(commit.commit_time))
-            commits.append(obj)
+            commits.append(Commit.build_instance(repo.name + '^' + commit.hex, commit))
         return commits
 
 
@@ -326,9 +295,9 @@ class Repo(DjangoObjectType):
         #**BranchConnection.get_repo_commits_input_fields()
     )
     commit = graphene.Field(
-        FullCommit,
-        resolver=FullCommit.resolve_repo_commit,
-        **FullCommit.get_repo_commit_input_fields()
+        Commit,
+        resolver=Commit.resolve_repo_commit,
+        **Commit.get_repo_commit_input_fields()
     )
     commits = relay.ConnectionField(
         LogCommitConnection,
