@@ -131,44 +131,6 @@ class LogCommit(ObjectType):
                          committer=commit.committer.name, atime=humantime(commit.commit_time))
 
 
-class LogCommitConnection(relay.Connection):
-    class Meta:
-        node = LogCommit
-
-    rev = graphene.String()
-
-    def resolve_rev(connection: 'LogCommitConnection', info, **args):
-        return get_from_context_cache(info.context, 'rev')
-
-    @staticmethod
-    def get_repo_commits_input_fields():
-        """Input fields for Repo field 'commits'."""
-        return {
-            'rev': graphene.Argument(graphene.String),
-        }
-
-    def resolve_repo_commits(repo: RepoModel, info, **args):
-        """Resolver for Repo field 'commits'."""
-        git_repo = repo.git_repo
-        rev = args.get('rev', None)
-        if not rev:
-            last = git_repo[git_repo.head.target]
-        else:
-            last = git_repo.revparse_single(rev)
-            if not last:
-                return None
-        # stash rev for resolve_rev()
-        cache_in_context(info.context, 'rev', rev)
-        commits = []
-        for commit in git_repo.walk(last.id, git.GIT_SORT_TOPOLOGICAL):
-            obj = LogCommit(id=str(repo.name) + '^' + commit.hex, oid=commit.hex,
-                            message=commit.message,
-                            author=commit.author.name, committer=commit.committer.name,
-                            atime=humantime(commit.commit_time))
-            commits.append(obj)
-        return commits
-
-
 class TreeEntry(ObjectType):
     class Meta:
         interfaces = (Node, )
@@ -312,6 +274,44 @@ class FullCommit(ObjectType):
             return None
         commit = git_repo.revparse_single(rev)
         return FullCommit.build_instance(repo.name + '^' + commit.hex, commit)
+
+
+class LogCommitConnection(relay.Connection):
+    class Meta:
+        node = LogCommit
+
+    rev = graphene.String()
+
+    def resolve_rev(connection: 'LogCommitConnection', info, **args):
+        return get_from_context_cache(info.context, 'rev')
+
+    @staticmethod
+    def get_repo_commits_input_fields():
+        """Input fields for Repo field 'commits'."""
+        return {
+            'rev': graphene.Argument(graphene.String),
+        }
+
+    def resolve_repo_commits(repo: RepoModel, info, **args):
+        """Resolver for Repo field 'commits'."""
+        git_repo = repo.git_repo
+        rev = args.get('rev', None)
+        if not rev:
+            last = git_repo[git_repo.head.target]
+        else:
+            last = git_repo.revparse_single(rev)
+            if not last:
+                return None
+        # stash rev for resolve_rev()
+        cache_in_context(info.context, 'rev', rev)
+        commits = []
+        for commit in git_repo.walk(last.id, git.GIT_SORT_TOPOLOGICAL):
+            obj = LogCommit(id=str(repo.name) + '^' + commit.hex, oid=commit.hex,
+                            message=commit.message,
+                            author=commit.author.name, committer=commit.committer.name,
+                            atime=humantime(commit.commit_time))
+            commits.append(obj)
+        return commits
 
 
 class Repo(DjangoObjectType):
