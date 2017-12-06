@@ -27,6 +27,10 @@ import pygit2 as git
 
 
 class RepoModel(models.Model):
+    class Meta:
+        verbose_name = 'Repository'
+        verbose_name_plural = 'Repositories'
+
     name = models.CharField(max_length=100, unique=True, db_index=True)
     path = models.CharField(max_length=1024)
     description = models.TextField(null=True, blank=True)
