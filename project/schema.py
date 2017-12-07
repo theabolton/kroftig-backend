@@ -25,6 +25,8 @@ import graphene
 
 import kroftig.schema
 
+from.settings import DEBUG
+
 
 class Query(kroftig.schema.Query, graphene.ObjectType):
     pass
@@ -52,5 +54,7 @@ class AuthMiddleware(object):
         if info.context.user.is_authenticated:
             return next(root, info, **args)
         if (info.field_name, info.parent_type.name) in VALID_UNAUTHENTICATED_FIELDS:
+            return next(root, info, **args)
+        if DEBUG and 'HTTP_X_KROFTIG_DEBUG_ALLOW' in info.context.META:
             return next(root, info, **args)
         raise Exception('access denied, please log in')
