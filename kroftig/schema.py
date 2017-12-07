@@ -23,6 +23,7 @@
 
 import datetime
 
+from django.contrib.auth import authenticate, get_user_model, login, logout
 import django.contrib.humanize.templatetags.humanize as humanize
 import graphene
 from graphene import ObjectType, relay
@@ -58,6 +59,12 @@ def cache_in_context(context, key, value):
 def get_from_context_cache(context, key):
     """Retrieve a cached item from the context. Raise KeyError if not present."""
     return context.kroftig[key]
+
+
+class User(DjangoObjectType):
+    class Meta:
+        model = get_user_model()
+        only_fields = ['username', 'first_name', 'last_name', 'email', 'is_staff', 'is_active']
 
 
 class Branch(ObjectType):
@@ -338,6 +345,46 @@ class Query(object):
         **Repo.get_query_repo_input_fields()
     )
     repos = graphene.List(Repo)
+    user = graphene.Field(User)
+    users = graphene.List(User)
 
     def resolve_repos(_, info):
         return RepoModel.objects.all().order_by('name')
+
+    def resolve_user(_, info):
+        if not info.context.user or not isinstance(info.context.user, get_user_model()):
+           return None
+        return info.context.user
+
+    def resolve_users(_, info):
+        return get_user_model().objects.all().order_by('username')
+
+
+class LogIn(graphene.Mutation):
+    user = graphene.Field(User)
+
+    class Arguments:
+        username = graphene.String()
+        password = graphene.String()
+
+    @classmethod
+    def mutate(cls, root, info, username, password):
+        user = authenticate(username=username, password=password)
+        if not user or not user.is_active:
+            raise Exception('invalid login')
+        login(info.context, user)
+        return cls(user=user)
+
+
+class LogOut(graphene.Mutation):
+    success = graphene.Boolean() # must return something
+
+    @classmethod
+    def mutate(cls, root, info):
+        logout(info.context)
+        return cls(success=True)
+
+
+class Mutation(object):
+    log_in = LogIn.Field()
+    log_out = LogOut.Field()

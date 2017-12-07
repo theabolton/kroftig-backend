@@ -30,4 +30,27 @@ class Query(kroftig.schema.Query, graphene.ObjectType):
     pass
 
 
-schema = graphene.Schema(query=Query)
+class Mutation(kroftig.schema.Mutation, graphene.ObjectType):
+    pass
+
+
+schema = graphene.Schema(query=Query, mutation=Mutation)
+
+
+# GraphQL query/mutation fields (and their parent type names) which may be accessed without being
+# logged in.
+VALID_UNAUTHENTICATED_FIELDS = (
+    # (info.field_name, info.parent_type.name)
+    ('logIn', 'Mutation'),
+    ('logOut', 'Mutation'),
+    ('success', 'LogOut'),
+)
+
+
+class AuthMiddleware(object):
+    def resolve(self, next, root, info, **args):
+        if info.context.user.is_authenticated:
+            return next(root, info, **args)
+        if (info.field_name, info.parent_type.name) in VALID_UNAUTHENTICATED_FIELDS:
+            return next(root, info, **args)
+        raise Exception('access denied, please log in')
