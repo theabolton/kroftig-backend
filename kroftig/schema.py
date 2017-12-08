@@ -22,6 +22,7 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import datetime
+import os
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
 import django.contrib.humanize.templatetags.humanize as humanize
@@ -130,28 +131,21 @@ class TreeEntry(ObjectType):
 
     @classmethod
     def get_node(cls, info, id):
-        """Sigh. PyGit2 doesn't include git_tree_lookup(), so until I can put together a PR for it,
-        just include the tree id in the encoded Node ID, like this (before base64 encoding):
-        'TreeEntry:<repo_name>^<tree-sha-in-hex>^<entry-sha-in-hex>'.
+        """Node IDs for TreeEntrys are of the form (before base64 encoding):
+        'TreeEntry:<repo_name>^<commit-sha-in-hex>^<file-path>'.
         """
-        # https://libgit2.github.com/libgit2/#HEAD/group/tree/git_tree_lookup
-        (repo_name, tree_id, entry_id) = id.split('^')
+        (repo_name, commit_id, path) = id.split('^', maxsplit=2)
         repo = get_repo_from_name(repo_name)
         if not repo:
             return None
         cache_in_context(info.context, 'repo', repo)
         git_repo = repo.git_repo
-        tree = git_repo.get(tree_id)
-        if not tree:
+        commit = git_repo.get(commit_id)
+        if not commit:
             return None
-        # And no get_tree_entry_byid() either? Fine, do it manually:
-        # https://libgit2.github.com/libgit2/#HEAD/group/tree/git_tree_entry_byid
-        entry = None
-        for e in tree:
-            if e.hex == entry_id:
-                entry = e
-                break
-        if not entry:
+        try:
+            entry = commit.tree[path]
+        except:
             return None
         return TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
                          type_=entry.type)
@@ -162,11 +156,12 @@ class Tree(relay.Connection):
         node = TreeEntry
 
     @staticmethod
-    def build_instance(repo_name, commit):
+    def build_instance(repo_name, commit, tree, path):
+        path = path or ''
         entries = []
-        for entry in commit.tree:
-            entries.append(TreeEntry(id=repo_name + '^' + commit.tree.hex + '^' + entry.hex,
-                                     oid=entry.hex, name=entry.name, filemode=entry.filemode,
+        for entry in tree:
+            id = repo_name + '^' + commit.hex + '^' + os.path.join(path, entry.name)
+            entries.append(TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
                                      type_=entry.type))
         return entries
 
@@ -175,13 +170,14 @@ class Tree(relay.Connection):
         repo = get_from_context_cache(info.context, 'repo')
         git_repo = repo.git_repo
         commit = git_repo.get(commit.oid)
-        return Tree.build_instance(repo.name, commit)
+        return Tree.build_instance(repo.name, commit, commit.tree, '')
 
     @staticmethod
     def get_repo_tree_input_fields():
         """Input fields for Repo field 'tree'."""
         return {
-            'rev': graphene.Argument(graphene.String),
+            'rev': graphene.Argument(graphene.String, required=True),
+            'path': graphene.Argument(graphene.String),
         }
 
     def resolve_repo_tree(repo: RepoModel, info, **args):
@@ -190,9 +186,18 @@ class Tree(relay.Connection):
         rev = args.get('rev')
         try:
             commit = git_repo.revparse_single(rev)
-        except KeyError:
-            raise Exception("revision '{}' not found".format(rev))
-        return Tree.build_instance(repo.name, commit)
+            tree = commit.tree
+        except (KeyError, ValueError):
+            raise Exception("commit reference '{}' not found".format(rev))
+        path = args.get('path')
+        if path:
+            try:
+                entry = commit.tree[path]
+                assert entry.type == 'tree'
+            except:
+                raise Exception("commit {}: bad tree path '{}'".format(commit.hex, path))
+            tree = git_repo.get(entry.oid)
+        return Tree.build_instance(repo.name, commit, tree, path)
 
 
 class Commit(ObjectType):

@@ -247,12 +247,12 @@ class RelayNodeTests(TestCase):
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
-    def test_node_for_tree_entry(self):
+    def _test_node_for_tree_entry(self, path):
         set_up_test_data(self.tempdir)
         query = '''
           query TestNodeForTreeEntry {
             repo(name: "test_repo") {
-              tree(rev: "master" first: 1) {
+              tree(rev: "master" %s first: 1) {
                 edges {
                   node {
                     id
@@ -263,7 +263,7 @@ class RelayNodeTests(TestCase):
               }
             }
           }
-        '''
+        ''' % path
         schema = graphene.Schema(query=Query)
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
@@ -292,6 +292,15 @@ class RelayNodeTests(TestCase):
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
+
+    def test_node_for_tree_entry(self):
+        self._test_node_for_tree_entry('')
+
+    def test_node_for_tree_entry_with_empty_path(self):
+        self._test_node_for_tree_entry('path: ""')
+
+    def test_node_for_tree_entry_with_path(self):
+        self._test_node_for_tree_entry('path: "project"')
 
 
 # ========== Repo tests ==========
@@ -547,13 +556,13 @@ class RepoTests(TestCase):
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
-    def test_repo_tree(self):
+    def _test_repo_tree(self, path, expected):
         """Test Repo 'tree' field."""
         set_up_test_data(self.tempdir)
         query = '''
           query RepoTreeTest {
             repo(name: "test_repo") {
-              tree(rev: "master", first: 100) {
+              tree(rev: "master" %s first: 100) {
                 edges {
                   node {
                     name
@@ -563,19 +572,31 @@ class RepoTests(TestCase):
               }
             }
           }
-        '''
+        ''' % path
         schema = graphene.Schema(query=Query)
         result = schema.execute(query, context_value=TestContext())
         self.assertIsNone(result.errors, msg=format_graphql_errors(result.errors))
         files = list(map(lambda node: node['node']['name'], result.data['repo']['tree']['edges']))
         files.sort()
-        # brittle, depends on the contents of the repo:
-        expected = ['.gitignore', 'LICENSE', 'README.rst', 'kroftig', 'manage.py', 'project',
-                    'requirements.txt']
         self.assertEqual(files, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
         size_present = any(map(lambda node: node['node']['size'] is not None,
                                result.data['repo']['tree']['edges']))
         self.assertTrue(size_present, 'none of the sizes in the query were non-null')
+
+    # brittle, these depend on the contents of the repo:
+    def test_repo_tree(self):
+        expected = ['.gitignore', 'LICENSE', 'README.rst', 'kroftig', 'manage.py', 'project',
+                    'requirements.txt']
+        self._test_repo_tree('', expected)
+
+    def test_repo_tree_with_empty_path(self):
+        expected = ['.gitignore', 'LICENSE', 'README.rst', 'kroftig', 'manage.py', 'project',
+                    'requirements.txt']
+        self._test_repo_tree('path: ""', expected)
+
+    def test_repo_tree_with_path(self):
+        expected = ['__init__.py', 'schema.py', 'settings.py', 'urls.py', 'wsgi.py']
+        self._test_repo_tree('path: "project"', expected)
 
     def test_repo_commit(self):
         """Test Repo 'commit' field."""
