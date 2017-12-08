@@ -415,7 +415,7 @@ class RepoTests(TestCase):
                                 msg=repr(result.data)) # should have at least 4 commits
 
     def test_repo_commits_pagination(self):
-        """Make sure that pagination works on LogCommitConnection."""
+        """Make sure that pagination works on CommitConnection."""
         set_up_test_data(self.tempdir)
         # retrieve the first three commits, plus a cursor for the next page
         query = '''
@@ -487,11 +487,11 @@ class RepoTests(TestCase):
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
 
     def test_repo_commits_with_rev(self):
-        """Test the LogCommitConnection 'rev' field."""
+        """Test the CommitConnection 'rev' field."""
         set_up_test_data(self.tempdir)
         # retrieve the first three commits
         query = '''
-          query RepoCommitsWithRefTest {
+          query RepoCommitsWithRevTest {
             repo(name: "test_repo") {
               commits(first: 3) {
                 edges {
@@ -522,7 +522,7 @@ class RepoTests(TestCase):
         self.assertEqual(result.data, expected, msg='\n'+repr(expected)+'\n'+repr(result.data))
         # ask for commits from HEAD^, which should start at the second result from above
         query = '''
-          query RepoCommitsWithRefTest2 {
+          query RepoCommitsWithRevTest2 {
             repo(name: "test_repo") {
               commits(rev: "HEAD^", first: 1) {
                 edges {

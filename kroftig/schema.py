@@ -170,7 +170,7 @@ class Tree(relay.Connection):
                                      type_=entry.type))
         return entries
 
-    def resolve_full_commit_tree(commit: 'Commit', info, **args):
+    def resolve_commit_tree(commit: 'Commit', info, **args):
         """Resolver for Commit field 'tree'."""
         repo = get_from_context_cache(info.context, 'repo')
         git_repo = repo.git_repo
@@ -211,7 +211,7 @@ class Commit(ObjectType):
     # make a Tree instance available. On the other hand, parent commits won't be fetched for the
     # same view, so just return their IDs.
     parent_ids = graphene.List(graphene.String)
-    tree = relay.ConnectionField(Tree, resolver=Tree.resolve_full_commit_tree,
+    tree = relay.ConnectionField(Tree, resolver=Tree.resolve_commit_tree,
                                  description="Relatively expensive, only fetch if needed")
 
     @staticmethod
@@ -256,13 +256,13 @@ class Commit(ObjectType):
         return Commit.build_instance(repo.name + '^' + commit.hex, commit)
 
 
-class LogCommitConnection(relay.Connection):
+class CommitConnection(relay.Connection):
     class Meta:
         node = Commit
 
     rev = graphene.String()
 
-    def resolve_rev(connection: 'LogCommitConnection', info, **args):
+    def resolve_rev(connection: 'CommitConnection', info, **args):
         return get_from_context_cache(info.context, 'rev')
 
     @staticmethod
@@ -307,9 +307,9 @@ class Repo(DjangoObjectType):
         **Commit.get_repo_commit_input_fields()
     )
     commits = relay.ConnectionField(
-        LogCommitConnection,
-        resolver=LogCommitConnection.resolve_repo_commits,
-        **LogCommitConnection.get_repo_commits_input_fields()
+        CommitConnection,
+        resolver=CommitConnection.resolve_repo_commits,
+        **CommitConnection.get_repo_commits_input_fields()
     )
     tree = relay.ConnectionField(
         Tree,
