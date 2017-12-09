@@ -129,6 +129,15 @@ class TreeEntry(ObjectType):
             return obj.size
         return None
 
+    @staticmethod
+    def build_instance(id, entry):
+        if entry.filemode == git.GIT_FILEMODE_LINK:
+            type_ = 'link'
+        else:
+            type_ = entry.type
+        return TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
+                         type_=type_)
+
     @classmethod
     def get_node(cls, info, id):
         """Node IDs for TreeEntrys are of the form (before base64 encoding):
@@ -147,8 +156,7 @@ class TreeEntry(ObjectType):
             entry = commit.tree[path]
         except:
             return None
-        return TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
-                         type_=entry.type)
+        return TreeEntry.build_instance(id, entry)
 
 
 class Tree(relay.Connection):
@@ -161,8 +169,7 @@ class Tree(relay.Connection):
         entries = []
         for entry in tree:
             id = repo_name + '^' + commit.hex + '^' + os.path.join(path, entry.name)
-            entries.append(TreeEntry(id=id, oid=entry.hex, name=entry.name, filemode=entry.filemode,
-                                     type_=entry.type))
+            entries.append(TreeEntry.build_instance(id, entry))
         return entries
 
     def resolve_commit_tree(commit: 'Commit', info, **args):
