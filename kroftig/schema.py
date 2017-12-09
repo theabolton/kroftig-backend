@@ -32,6 +32,7 @@ from graphene.relay import Node
 from graphene_django import DjangoObjectType
 import pygit2 as git
 
+from .git_utils import get_latest_changing_commits_for_tree
 from .models import get_repo_from_name, RepoModel
 
 
@@ -121,6 +122,7 @@ class TreeEntry(ObjectType):
     filemode = graphene.Int()
     type_ = graphene.String(name='type')
     size = graphene.Int()
+    latest_commit = graphene.Field('kroftig.schema.Commit')
 
     def resolve_size(entry: 'TreeEntry', info, **args):
         repo = get_from_context_cache(info.context, 'repo')
@@ -128,6 +130,31 @@ class TreeEntry(ObjectType):
         if obj.type == git.GIT_OBJ_BLOB:
             return obj.size
         return None
+
+    def resolve_latest_commit(entry: 'TreeEntry', info, **args):
+        """Node IDs for TreeEntrys are of the form (before base64 encoding):
+        'TreeEntry:<repo_name>^<commit-sha-in-hex>^<file-path>'.
+        """
+        (_, commit_id, path) = entry.id.split('^', maxsplit=2)
+        repo = get_from_context_cache(info.context, 'repo')
+        # get_latest_changing_commits_for_tree() is expensive and returns results for the entire
+        # tree, so cache its results.
+        try:
+            latests = get_from_context_cache(info.context, 'latests')
+        except KeyError:
+            git_repo = repo.git_repo
+            if '/' in path:
+                filter_path = path[:path.rfind('/')]
+            else:
+                filter_path = ''
+            latests = get_latest_changing_commits_for_tree(git_repo, git_repo.get(commit_id),
+                                                           filter_path)
+            cache_in_context(info.context, 'latests', latests)
+        try:
+            commit = latests[path]['latest']
+            return Commit.build_instance(repo.name + '^' + commit.hex, commit)
+        except:
+            return None
 
     @staticmethod
     def build_instance(id, entry):
@@ -140,9 +167,6 @@ class TreeEntry(ObjectType):
 
     @classmethod
     def get_node(cls, info, id):
-        """Node IDs for TreeEntrys are of the form (before base64 encoding):
-        'TreeEntry:<repo_name>^<commit-sha-in-hex>^<file-path>'.
-        """
         (repo_name, commit_id, path) = id.split('^', maxsplit=2)
         repo = get_repo_from_name(repo_name)
         if not repo:
