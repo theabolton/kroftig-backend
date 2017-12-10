@@ -66,7 +66,8 @@ def get_from_context_cache(context, key):
 class User(DjangoObjectType):
     class Meta:
         model = get_user_model()
-        only_fields = ['username', 'first_name', 'last_name', 'email', 'is_staff', 'is_active']
+        only_fields = ['id', 'username', 'first_name', 'last_name', 'email', 'is_staff',
+                       'is_active']
 
 
 class Branch(ObjectType):
@@ -194,6 +195,7 @@ class Tree(relay.Connection):
         for entry in tree:
             id = repo_name + '^' + commit.hex + '^' + os.path.join(path, entry.name)
             entries.append(TreeEntry.build_instance(id, entry))
+        entries.sort(key=lambda e: (e.type_ == 'tree' and '0' or '1') + e.name)
         return entries
 
     def resolve_commit_tree(commit: 'Commit', info, **args):
@@ -396,15 +398,17 @@ class Query(object):
         return get_user_model().objects.all().order_by('username')
 
 
-class LogIn(graphene.Mutation):
+class LogIn(relay.ClientIDMutation):
     user = graphene.Field(User)
 
-    class Arguments:
-        username = graphene.String()
-        password = graphene.String()
+    class Input:
+        username = graphene.String(required=True)
+        password = graphene.String(required=True)
 
     @classmethod
-    def mutate(cls, root, info, username, password):
+    def mutate_and_get_payload(cls, root, info, **input):
+        username = input.get('username')
+        password = input.get('password')
         user = authenticate(username=username, password=password)
         if not user or not user.is_active:
             raise Exception('invalid login')
@@ -412,11 +416,11 @@ class LogIn(graphene.Mutation):
         return cls(user=user)
 
 
-class LogOut(graphene.Mutation):
+class LogOut(relay.ClientIDMutation):
     success = graphene.Boolean() # must return something
 
     @classmethod
-    def mutate(cls, root, info):
+    def mutate_and_get_payload(cls, root, info, **input):
         logout(info.context)
         return cls(success=True)
 

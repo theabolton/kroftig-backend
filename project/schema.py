@@ -45,7 +45,7 @@ VALID_UNAUTHENTICATED_FIELDS = (
     # (info.field_name, info.parent_type.name)
     ('logIn', 'Mutation'),
     ('logOut', 'Mutation'),
-    ('success', 'LogOut'),
+    ('success', 'LogOutPayload'),
 )
 
 
