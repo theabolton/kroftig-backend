@@ -33,6 +33,10 @@ application in the browser, with which one may browse git repositories on the ba
 server in much the same way as GitHub. As such, it may be an valuable base for custom
 web-based git tools.
 
+.. image:: docs/screenshot-kroftig.png
+   :alt: Screenshot
+   :target: docs/screenshot-kroftig.png
+
 Installation
 ============
 
