@@ -1,20 +1,35 @@
-+++++++
-Kroftig
-+++++++
++++++++++++++++++
+Kroftig - Backend
++++++++++++++++++
 
-|license| |build|
+|license|
 
 .. |license| image:: https://img.shields.io/badge/License-MIT-yellow.svg
    :target: https://en.wikipedia.org/wiki/MIT_License
    :alt: MIT Licensed
 
-.. |build| image:: https://travis-ci.org/smbolton/kroftig.svg?branch=master
+.. .. |build| image:: https://travis-ci.org/smbolton/kroftig.svg?branch=master
    :target: https://travis-ci.org/smbolton/kroftig
-   :alt: Documentation Status
+   :alt: Build Status
 
 *Kroftig* ('git fork' backwards) is a tool for auditing multiple related git repositories.
 
+**Development of Kroftig is suspended**, for two reasons:
+
+* The original project for which I planned to use Kroftig ceased to have value, and
+
+* Graphene_, the Python GraphQL_ framework upon which this backend is built, is not mature
+  enough for anything but very straightforward use. When I return to this project, if
+  Graphene hasn't matured, I will re-write the backend using Node.js and express-graphql_.
+
+.. _Graphene: https://github.com/graphql-python/graphene
 .. _GraphQL: http://graphql.org/
+.. _express-graphql: https://github.com/graphql/express-graphql
+
+At its present stage of development, Kroftig presents a React-based single-page
+application in the browser, with which one may browse git repositories on the backend
+server in much the same way as GitHub. As such, it may be an valuable base for custom
+web-based git tools.
 
 Installation
 ============
