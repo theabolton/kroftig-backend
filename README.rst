@@ -12,7 +12,9 @@ Kroftig - Backend
    :target: https://travis-ci.org/smbolton/kroftig
    :alt: Build Status
 
-*Kroftig* ('git fork' backwards) is a tool for auditing multiple related git repositories.
+*Kroftig* ('git fork' backwards) is a web-based tool for auditing multiple related git repositories.
+This repository holds the back end, which is written using Django, Graphene-Django, Graphene,
+GraphQL, pygit2, and libgit2. The front end is `here <https://github.com/smbolton/kroftig-frontend>`_.
 
 **Development of Kroftig is suspended**, for two reasons:
 
@@ -36,8 +38,8 @@ Installation
 
 .. code:: shell
 
-   $ git clone https://github.com/smbolton/kroftig.git
-   $ cd kroftig
+   $ git clone https://github.com/smbolton/kroftig-backend.git
+   $ cd kroftig-backend
    $ virtualenv --python=python3 venv
    $ source venv/bin/activate
    $ pip install -r requirements.txt
